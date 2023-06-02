@@ -1,0 +1,401 @@
+---
+title: "Avance_Proyecto"
+author: "Grupo_9"
+format: pdf
+editor: visual
+---
+
+# Lectura de Datos
+
+```{r}
+df_origen<-read.csv("C:/Users/wolfo/OneDrive/Escritorio/Trabajo/datos_proyecto/db_firewall/log2.csv")
+df<-df_origen
+```
+
+# Importar librerías
+
+```{r}
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(e1071)
+library(DataExplorer)
+library(pROC)
+library(caTools)
+library(MASS)
+library(dplyr)
+library(PRROC)
+library(class)
+library(rpart)
+library(rpart.plot)
+library(tree)
+library(readr)
+library(purrr)
+library(cluster)
+library(gridExtra)
+```
+
+```{r}
+df$Action[df$Action=="drop"]<-0
+df$Action[df$Action=="deny"]<-0
+df$Action[df$Action=="allow"]<-1
+df$Action[df$Action=="reset-both"]<-0
+df$Action <- as.factor(df$Action)
+glimpse(df)
+```
+
+# Análisis exploratorio de datos EDA
+
+La función plot_intro() nos entrega el tipo de variables en las Al columnas y el porcentaje de datos faltantes.
+
+```{r}
+plot_intro(df)
+```
+
+Análisis general de la base de datos:
+
+```{r}
+summary(df)
+```
+
+La primera función nos entrega los histogramas hechos sistemáticamente usando el paquete ggplot2
+
+```{r}
+plot_histogram(df)
+```
+
+Se realiza una estimación de densidad por kernel, que vendría siendo algo así como una versión suavizada del histograma.
+
+```{r}
+plot_density(df)
+```
+
+Para realizar un análisis correlacional de las variables en estudio:
+
+```{r}
+plot_correlation(df)
+```
+
+Gráficos de barras para la variable Action:
+
+```{r}
+plot_bar(df)
+```
+
+# Detección de Outliers
+
+```{r}
+ggplot(df, aes(y= Bytes.Sent, x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+
+ggplot(df, aes(y= Destination.Port, x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+
+ggplot(df, aes(y= NAT.Source.Port, x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+
+ggplot(df, aes(y= NAT.Destination.Port, x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+
+ggplot(df, aes(y= Bytes, x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+
+ggplot(df, aes(y= Bytes.Sent, x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+
+ggplot(df, aes(y= Bytes.Received, x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+
+ggplot(df, aes(y= Packets, x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+
+ggplot(df, aes(y= Elapsed.Time..sec., x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+
+ggplot(df, aes(y= pkts_sent, x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+
+ggplot(df, aes(y= pkts_received, x = "", fill = Action)) + 
+  geom_boxplot() + 
+  theme_test() +  xlab(" ")
+```
+
+```{r}
+plot_intro(df)
+```
+
+```{r}
+plot_correlation(df)
+```
+
+```{r}
+boxplot(df$Action)
+```
+
+# Regresión Logística
+
+```{r}
+attach(df)
+fit<-glm(Action~Source.Port+Destination.Port+NAT.Source.Port+
+          NAT.Destination.Port+Bytes+Bytes.Received+Bytes.Sent+Packets
+          +pkts_received+pkts_sent,data=df,family=binomial)
+summary(fit)
+```
+
+```{r}
+set.seed(163)
+split=sample.split(df$Action,SplitRatio = 0.8)
+train<-df[split==TRUE,]
+test<-df[split==FALSE,]
+```
+
+```{r}
+predicciones_rl1<-predict(fit,newdata = test,type="response")
+y_pred1=rep(0,length(predicciones_rl1))
+y_pred1[predicciones_rl1>0.5]=1
+y_pred1<-as.factor(y_pred1)
+confusionMatrix(y_pred1,test$Action,positive = "1")
+```
+
+```{r}
+roc_obj1<-roc(test$Action,predicciones_rl1)
+plot(roc_obj1)
+auc(roc_obj1)
+coords(roc_obj1,"best","threshold")
+```
+
+```{r}
+fit2<-glm(Action~Source.Port+Destination.Port+NAT.Source.Port+Bytes+Bytes.Received
+         +Packets+pkts_received,data=train,family=binomial)
+summary(fit2)
+```
+
+```{r}
+predicciones_rl2<-predict(fit2,newdata = test,type="response")
+y_pred2=rep(0,length(predicciones_rl2))
+y_pred2[predicciones_rl2>0.6]=1
+y_pred2<-as.factor(y_pred2)
+confusionMatrix(y_pred2,test$Action,positive = "1")
+```
+
+```{r}
+roc_obj2<-roc(test$Action,predicciones_rl2)
+plot(roc_obj2)
+auc(roc_obj2)
+coords(roc_obj2,"best","threshold")
+```
+
+```{r}
+fit3<-glm(Action~NAT.Source.Port+Packets+pkts_received,data=train,family=binomial)
+summary(fit3)
+```
+
+```{r}
+predicciones_rl3<-predict(fit3,newdata = test,type="response")
+y_pred3=rep(0,length(predicciones_rl3))
+y_pred3[predicciones_rl3>0.5]=1
+y_pred3<-as.factor(y_pred3)
+confusionMatrix(y_pred3,test$Action,positive = "1")
+```
+
+```{r}
+roc_obj3<-roc(test$Action,predicciones_rl3)
+plot(roc_obj3)
+auc(roc_obj3)
+coords(roc_obj3,"best","threshold")
+```
+
+# LDA
+
+```{r}
+mod_lda<-lda(Action~Source.Port+Destination.Port+NAT.Source.Port+Bytes+
+        Bytes.Received+Packets+pkts_received,data=train)
+mod_lda
+
+predicciones_lda<-predict(mod_lda,newdata=test)
+```
+
+```{r}
+predicciones_lda<-predict(mod_lda,newdata=test)
+confusionMatrix(test$Action,predicciones_lda$class)
+```
+
+```{r}
+roc_obj_lda<-roc(test$Action,predicciones_lda$posterior[,2])
+plot(roc_obj_lda)
+auc(roc_obj_lda)
+```
+
+# QDA
+
+```{r}
+mod_qda<-qda(Action~Source.Port+Destination.Port+NAT.Source.Port+Bytes+
+        Bytes.Received+Packets+pkts_received,data=train)
+mod_qda
+
+predicciones_qda<-predict(mod_qda,newdata=test)
+```
+
+```{r}
+predicciones_qda<-predict(mod_qda,newdata=test)
+confusionMatrix(test$Action,predicciones_qda$class)
+```
+
+```{r}
+roc_obj_qda<-roc(test$Action,predicciones_qda$posterior[,2])
+plot(roc_obj_qda)
+auc(roc_obj_qda)
+```
+
+# KNN
+
+```{r}
+set.seed(163)
+train_knn=train%>% dplyr::select(-c(Action))
+test_knn=test %>% dplyr::select(-c(Action))
+
+overall.accuracy=c()
+for (i in 1:15){
+  knn.pred=knn(train_knn,test_knn,train$Action,k=i)
+  values=confusionMatrix(table(knn.pred,test$Action))
+  overall=values$overall
+  overall.accuracy=append(overall.accuracy,overall["Accuracy"])
+}
+acc=data.frame(k=1:15, accuracy=overall.accuracy)
+ggplot(acc)+aes(x=k,y=accuracy)+geom_line(size=0.5,colour="#112446") +  theme_minimal() + geom_vline(xintercept = 5, color = "red")
+```
+
+```{r}
+knn_fit <- knn(train = train_knn, test = test_knn, cl = train$Action, k = 5, prob = TRUE)
+knn_probs <- attr(knn_fit, "prob")
+```
+
+```{r}
+confusionMatrix(table(knn_fit,test$Action))
+```
+
+```{r}
+roc_obj_knn<-roc(test$Action,knn_probs)
+plot(roc_obj_knn)
+auc(roc_obj_knn)
+```
+
+# Árbol de Decisión
+
+```{r}
+tree_fit=rpart(Action~Source.Port+Destination.Port+NAT.Source.Port+Bytes+Bytes.Received+Packets+pkts_received,data=train)
+summary(tree_fit)
+```
+```{r}
+rpart.plot(tree_fit)
+```
+
+```{r}
+tree_pred=predict(tree_fit, test , type ="class")
+confusionMatrix(table(tree_pred,test$Action))
+```
+
+```{r}
+tree_pred<-predict(tree_fit,test,type="prob")
+```
+
+```{r}
+roc_obj4 <- roc(test$Action,tree_pred[,2])
+plot(roc_obj4)
+auc(roc_obj4)
+```
+
+```{r}
+rpart.plot(tree_fit)
+```
+
+# Comparación
+
+```{r}
+plot(roc_obj1,col="red")
+lines(roc_obj_lda,col="blue")
+lines(roc_obj_qda,col="green")
+lines(roc_obj_knn,col="yellow")
+lines(roc_obj4,col="orange")
+legend(0.3, 0.5, legend=c("Regresión Logística", "LDA","QDA","KNN","Árbol de Decisión"),
+       col=c("red", "blue","green","yellow","orange"), lty=1:1:1:1:1, cex=0.8)
+```
+
+# PCA
+
+```{r}
+df_A<- df %>% dplyr::select(-Action)
+pca <- prcomp(df_A, scale = TRUE)
+
+### Varianza explicada por componente ----
+
+prop_varianza <- pca$sdev^2 / sum(pca$sdev^2)
+
+pca_var<-ggplot(data = data.frame(prop_varianza, pc = 1:length(prop_varianza)), aes(x = pc, y = prop_varianza)) + 
+  geom_col(width = 0.3) +  scale_y_continuous(limits = c(0,1)) +  theme_bw() +
+  labs(x = "Componente principal", y = "Prop. de varianza explicada")
+pca_var
+
+### Varianza explicada acumulada ----
+
+prop_varianza_acum <- cumsum(prop_varianza)
+
+pca_var_acum<-ggplot(data = data.frame(prop_varianza_acum, pc = 1:length(prop_varianza)), aes(x = pc, y = prop_varianza_acum, group = 1)) +
+  geom_point() +  geom_line() +  theme_bw() +  labs(x = "Componente principal", y = "Prop. varianza explicada acumulada")
+
+pca_var_acum
+
+biplot(pca)
+# Forma alternativa
+
+library(factoextra)
+
+fviz_eig(pca)
+
+# Representación gráfica de la importancia de cada variable
+
+library(corrplot)
+var <- get_pca_var(pca)
+corrplot(var$cos2, is.corr = FALSE)
+
+
+plot_prcomp(df)
+```
+
+```{r}
+summary(pca)
+```
+
+# K-means
+
+```{r}
+k2 <- kmeans(df_A, centers = 2, nstart = 25)
+k3 <- kmeans(df_A, centers = 3, nstart = 25)
+k4 <- kmeans(df_A, centers = 4, nstart = 25)
+k5 <- kmeans(df_A, centers = 5, nstart = 25)
+```
+
+```{r}
+p1 <- fviz_cluster(k2, geom = "point", data = df_A) + ggtitle("k = 2")
+p2 <- fviz_cluster(k3, geom = "point",  data = df_A) + ggtitle("k = 3")
+p3 <- fviz_cluster(k4, geom = "point",  data = df_A) + ggtitle("k = 4")
+p4 <- fviz_cluster(k5, geom = "point",  data = df_A) + ggtitle("k = 5")
+```
+
+```{r}
+grid.arrange(p1, p2, p3, p4, nrow = 2)
+```
+
+```{r}
+#fviz_nbclust(df_A, kmeans, method = "silhouette", k.max = 3)
+```
