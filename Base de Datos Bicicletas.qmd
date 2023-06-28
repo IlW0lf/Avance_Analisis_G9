@@ -1,0 +1,379 @@
+---
+title: "Proyecto_Final"
+format: html
+editor: visual
+---
+
+```{r}
+df_origen<-read.csv("C:/Users/gaspa/OneDrive - Universidad Técnica Federico Santa María/Escritorio/2023 S1/Análisis de negocios/Trabajo final/Informe 2/SeoulBikeData.csv")
+df<-df_origen
+```
+
+## Librerias
+
+```{r}
+library(tidyverse)
+library(caret)
+library(ggplot2)
+library(e1071)
+library(DataExplorer)
+library(pROC)
+library(caTools)
+library(MASS)
+library(dplyr)
+library(PRROC)
+library(class)
+library(rpart)
+library(rpart.plot)
+library(tree)
+library(readr)
+library(purrr)
+library(cluster)
+library(gridExtra)
+library(stargazer)
+library(broom)
+```
+
+## Procesamiento de datos
+
+```{r}
+df$Seasons[df$Seasons=="Winter"]<-1
+df$Seasons[df$Seasons=="Summer"]<-2
+df$Seasons[df$Seasons=="Spring"]<-3
+df$Seasons[df$Seasons=="Autumn"]<-4
+
+df$Holiday[df$Holiday=="No Holiday"]<-0
+df$Holiday[df$Holiday=="Holiday"]<-1
+
+df$FunctioningDay[df$FunctioningDay=="Yes"]<-1
+df$FunctioningDay[df$FunctioningDay=="No"]<-0
+
+df <- df %>% separate(Date, into = c("Day", "Month", "Year"), sep = "/")
+df <- df %>% mutate(Day = as.numeric(Day), Month = as.numeric(Month), Year = as.numeric(Year))
+
+for (i in c("Seasons","Holiday","FunctioningDay"))
+{
+df[[i]]<-as.numeric(df[[i]])
+}
+glimpse(df)
+```
+
+## Análisis exploratorio de datos
+
+```{r}
+plot_intro(df)
+```
+
+```{r}
+plot_correlation(df)
+```
+
+```{r}
+summary(df)
+```
+
+```{r}
+plot_histogram(df)
+```
+
+```{r}
+plot_density(df)
+```
+
+```{r}
+plot_bar(df)
+```
+
+### Analisis de Outliers
+
+```{r}
+attach(df)
+```
+
+```{r}
+boxplot(RentedBikeCount, ylab = 'RentedBikeCount')
+boxplot(Snowfall, ylab = 'Snowfall')
+boxplot(Rainfall, ylab = 'Rainfall')
+boxplot(SolarRadiation, ylab = 'SolarRadiation')
+boxplot(Dewpointtemperature, ylab = 'Dewpointtemperature')
+boxplot(Visibility, ylab = 'Visibility')
+boxplot(Hour, ylab = 'Hour')
+boxplot(Temperature , ylab = 'Temperature ')
+boxplot(Humidity, ylab = 'Humidity')
+boxplot(Windspeed, ylab = '  Windspeed')
+```
+
+## Regresión Lineal Multivariable
+
+```{r}
+fit<-lm(RentedBikeCount~.,data=df_norm)
+summary(fit)
+```
+
+```{r}
+set.seed(163)
+split=sample.split(df$RentedBikeCount,SplitRatio = 0.8)
+train<-df[split==TRUE,]
+test<-df[split==FALSE,]
+```
+
+```{r}
+df_norm <- subset(df,select = -c(Year))
+col <- sapply(df_norm, is.numeric)
+df_norm[col] <- scale(df_norm[col])
+df_norm[col] <- (df_norm[col] - min(df_norm[col])) / (max(df_norm[col]) - min(df_norm[col]))
+```
+
+```{r}
+split=sample.split(df_norm$RentedBikeCount,SplitRatio = 0.8)
+train_data<-df_norm[split==TRUE,]
+test_data<-df_norm[split==FALSE,]
+```
+
+Criterio de Información de Akaike:
+
+```{r}
+AIC(fit)
+```
+
+Criterio de información Bayesiano:
+
+```{r}
+BIC(fit)
+```
+
+Intervalos de confianza:
+
+```{r}
+confint(fit)
+```
+
+```{r}
+stargazer(fit,type="text", header = FALSE)
+```
+
+Análisis de residuos:
+
+```{r}
+residuos<-residuals(fit)
+hist(residuos, main = "Histograma de residuos", xlab = "Residuos")
+
+```
+
+```{r}
+ggplot(modelo_rm_opt2, aes(.fitted, .resid)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  ggtitle("Residuos vs Ajuste")
+```
+
+```{r}
+modelo_rm_opt2_res <- augment(modelo_rm_opt2, train)
+p4 <- ggplot(modelo_rm_opt2_res, aes(.fitted, .std.resid)) +
+  geom_hline(yintercept = 0) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  ggtitle("Residuos Estandarizados vs Ajuste")
+p5 <- ggplot(modelo_rm_opt2_res, aes(.fitted, sqrt(.std.resid))) +
+  geom_hline(yintercept = 0) +
+  geom_point() +
+  geom_smooth(se = FALSE) +
+  ggtitle("Reescalamiento")
+gridExtra::grid.arrange(p4, p5, nrow = 1)
+```
+
+Gráfico normal Q-Q plot
+
+```{r}
+qq_plot <- qqnorm(modelo_rm_opt2_res$.resid)
+qq_plot <- qqline(modelo_rm_opt2_res$.resid)
+```
+
+Grafico de Cook´s y Residuos vs Apalancamiento
+
+```{r}
+par(mfrow=c(1, 2))
+plot(modelo_rm_opt2, which = 4, id.n = 5)
+plot(modelo_rm_opt2, which = 5, id.n = 5)
+
+```
+
+## Support Vector Machine
+
+Lineal
+
+```{r}
+svm_fit_l <- svm(formula = RentedBikeCount~ ., data = train_data, kernel = 'linear')
+
+summary(svm_fit_l)  # Realizar predicciones en el conjunto de prueba
+predictions_l <- predict(svm_fit_l, newdata = test_data)
+```
+
+```{r}
+# Calcular el MSE
+mse_l <- mean((predictions_l - test_data$RentedBikeCount)^2)
+cor(predictions_l,test_data$RentedBikeCount)
+print(mse_l)
+```
+
+Radial
+
+```{r}
+svm_fit_r <- svm(formula = RentedBikeCount~ ., data = train_data, kernel = 'radial')
+
+summary(svm_fit_r)  # Realizar predicciones en el conjunto de prueba
+predictions_r <- predict(svm_fit_r, newdata = test_data)
+```
+
+```{r}
+# Calcular el MSE
+mse_r <- mean((predictions_r - test_data$RentedBikeCount)^2)
+cor(predictions_r,test_data$RentedBikeCount)
+print(mse_r)
+
+```
+
+## Árbol de Decisión
+
+```{r}
+tree_fit=rpart(RentedBikeCount~Hour+Temperature+Humidity+Windspeed+ Visibility+Dewpointtemperature+SolarRadiation+Rainfall+ Snowfall+Seasons+Holiday+FunctioningDay,data=train)
+summary(tree_fit)
+```
+
+```{r}
+plot(tree_fit)
+text(tree_fit,pretty=1)
+```
+
+```{r}
+rpart.plot(tree_fit)
+```
+
+## REDES NEURONALES BIBICLETAS
+
+```{r}
+sigmoid <- function(x) {
+return(1 / (1 + exp(-x)))
+}
+relu <- function(x) {
+return(max(0, x))
+}
+softplus <- function(x) {log(1 + exp(x))
+}
+tanh <- function(x) {
+return((exp(x) - exp(-x)) / (exp(x) + exp(-x)))
+}
+softmax <- function(x) {
+exps <- exp(x)
+return(exps / sum(exps))
+}
+```
+
+```{r}
+set.seed(163)
+nnet_model <- neuralnet(RentedBikeCount ~ Hour+Temperature+Humidity+Windspeed +Visibility+Dewpointtemperature+SolarRadiation+Rainfall+Snowfall+Seasons+Holiday+FunctioningDay, data = train_data, hidden=10,act.fct = "tanh")
+plot(nnet_model, rep="best")
+```
+
+```{r}
+model_results <- compute(nnet_model, test_data[3:14])
+predicted <- model_results$net.result
+cor(predicted, test_data$RentedBikeCount)
+```
+
+```{r}
+train_predictions <- compute(nnet_model, test_data)$net.result
+training_error <- sum((train_predictions - test_data$RentedBikeCount)^2) / nrow(test_data)
+print(training_error)
+```
+
+```{r}
+nnet_model3 <- neuralnet(RentedBikeCount ~ Hour+Temperature+Humidity+Windspeed +Visibility+Dewpointtemperature+SolarRadiation+Rainfall+Snowfall+Seasons+Holiday+FunctioningDay, data = train_data, hidden=c(10,10),act.fct = "tanh")
+plot(nnet_model, rep="best")
+```
+
+```{r}
+model_results3 <- compute(nnet_model3, test_data[3:14])
+predicted3 <- model_results3$net.result
+cor(predicted3, test_data$RentedBikeCount)
+```
+
+```{r}
+train_predictions3 <- compute(nnet_model3, test_data)$net.result
+training_error3 <- sum((train_predictions3 - test_data$RentedBikeCount)^2) / nrow(test_data)
+print(training_error3)
+```
+
+```{r}
+nnet_model4 <- neuralnet(RentedBikeCount ~ Hour+Temperature+Humidity+Windspeed +Visibility+Dewpointtemperature+SolarRadiation+Rainfall+Snowfall+Seasons+Holiday+FunctioningDay, data = train_data, hidden=16,act.fct = "tanh")
+plot(nnet_model, rep="best")
+```
+
+```{r}
+model_results4 <- compute(nnet_model4, test_data[3:14])
+predicted4 <- model_results4$net.result
+cor(predicted4, test_data$RentedBikeCount)
+train_predictions4 <- compute(nnet_model4, test_data)$net.result
+training_error4 <- sum((train_predictions4 - test_data$RentedBikeCount)^2) / nrow(test_data)
+print(training_error4)
+```
+
+```{r}
+nnet_model5 <- neuralnet(RentedBikeCount ~ Day+Month+Hour+Temperature+Humidity+Windspeed +Visibility+Dewpointtemperature+SolarRadiation+Rainfall+Snowfall+Seasons+Holiday+FunctioningDay, data = train_data, hidden=c(15,15),act.fct = "tanh")
+plot(nnet_model5, rep="best")
+```
+
+```{r}
+model_results5 <- compute(nnet_model5, test_data[1:15])
+predicted5 <- model_results5$net.result
+cor(predicted5, test_data$RentedBikeCount)
+train_predictions5 <- compute(nnet_model5, test_data)$net.result
+training_error5 <- sum((train_predictions5 - test_data$RentedBikeCount)^2) / nrow(test_data)
+print(training_error5)
+```
+
+```{r}
+nnet_model6 <- neuralnet(RentedBikeCount ~ Hour+Temperature+Humidity+Windspeed +Visibility+Dewpointtemperature+SolarRadiation+Rainfall+Snowfall+Seasons+Holiday+FunctioningDay, data = train_data, hidden=c(64,64))
+plot(nnet_model, rep="best")
+```
+
+```{r}
+model_results6 <- compute(nnet_model6, test_data[3:14])
+predicted6 <- model_results6$net.result
+cor(predicted6, test_data$RentedBikeCount)
+```
+
+```{r}
+nnet_model7 <- neuralnet(RentedBikeCount ~ Hour+Temperature+Humidity+Windspeed +Visibility+Dewpointtemperature+SolarRadiation+Rainfall+Snowfall+Seasons+Holiday+FunctioningDay, data = train_data, hidden=c(64,32))
+plot(nnet_model, rep="best")
+```
+
+```{r}
+model_results7 <- compute(nnet_model7, test_data[3:14])
+predicted7 <- model_results7$net.result
+cor(predicted7, test_data$RentedBikeCount)
+```
+
+```{r}
+train_predictions7 <- compute(nnet_model7, test_data)$net.result
+training_error7 <- sum((train_predictions7 - test_data$RentedBikeCount)^2) / nrow(test_data)
+print(training_error7)
+```
+
+```{r}
+nnet_model8 <- neuralnet(RentedBikeCount ~ Hour+Temperature+Humidity+Windspeed +Visibility+Dewpointtemperature+SolarRadiation+Rainfall+Snowfall+Seasons+Holiday+FunctioningDay, data = train_data, hidden=c(15,15))
+plot(nnet_model, rep="best")
+```
+
+```{r}
+model_results8 <- compute(nnet_model7, test_data[3:14])
+predicted7 <- model_results7$net.result
+cor(predicted7, test_data$RentedBikeCount)
+```
+
+```{r}
+train_predictions8 <- compute(nnet_model8, test_data)$net.result
+training_error8 <- sum((train_predictions8 - test_data$RentedBikeCount)^2) / nrow(test_data)
+print(training_error8)
+```
