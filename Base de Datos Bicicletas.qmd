@@ -250,7 +250,7 @@ text(tree_fit,pretty=1)
 rpart.plot(tree_fit)
 ```
 
-## REDES NEURONALES BIBICLETAS
+## Redes Neuronales
 
 ```{r}
 sigmoid <- function(x) {
