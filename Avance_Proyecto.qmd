@@ -399,3 +399,41 @@ grid.arrange(p1, p2, p3, p4, nrow = 2)
 ```{r}
 #fviz_nbclust(df_A, kmeans, method = "silhouette", k.max = 3)
 ```
+# Redes Neuronales
+
+Primero adapatamos los datos a datos numéricos.
+
+```{r}
+library(neuralnet)
+df$Action <- as.numeric(df$Action)
+df_normal <- subset(df)
+num_col <- sapply(df_normal, is.numeric)
+df_normal[num_col] <- scale(df_normal[num_col])
+df_normal[num_col] <- (df_normal[num_col] - min(df_normal[num_col])) / (max(df_normal[num_col]) - min(df_normal[num_col]))
+glimpse(df)
+split=sample.split(df_normal$Action,SplitRatio = 0.8)
+n_train<-df_normal[split==TRUE,]
+n_test<-df_normal[split==FALSE,]
+```
+
+```{r}
+softmax <- function(x) {exp(x) / sum(exp(x))
+}
+```
+
+```{r}
+nnet_model_f<-neuralnet(Action~NAT.Source.Port+Packets+pkts_received,data=n_train,stepmax = 1000000,learningrate = 0.0001,hidden=c(3,3),act.fct = softplus )
+plot(nnet_model1,rep = "best")
+```
+
+```{r}
+model_results <- compute(nnet_model_f,n_test[1:12])
+predicted <- model_results$net.result
+cor(predicted, n_test$RentedBikeCount)
+```
+
+```{r}
+train_predictions <- compute(nnet_model_f, n_train)$net.result
+training_error <- sum((train_predictions - n_train$Action)^2) / nrow(n_train)
+print(training_error)
+```
